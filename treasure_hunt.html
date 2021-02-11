@@ -1,0 +1,203 @@
+<html>
+<script src="https://cdn.ethers.io/lib/ethers-5.0.umd.min.js" type="text/javascript">
+</script>
+<style>
+.content {
+  max-width: 500px;
+  margin: auto;
+  line-height:2;
+  text-align:center;
+}
+td {
+  width: 20px;
+  height: 20px;
+  padding: 1px;
+  background-color: darkkhaki;
+}
+</style>
+<script type="module">
+    const TreasureHuntABI = [{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"digger","type":"address"},{"indexed":false,"internalType":"uint256","name":"tile","type":"uint256"},{"indexed":false,"internalType":"uint8","name":"tileValue","type":"uint8"},{"indexed":false,"internalType":"uint256","name":"totalScore","type":"uint256"}],"name":"Dig","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"gameEndtime","type":"uint256"}],"name":"GameStarted","type":"event"},{"inputs":[{"internalType":"uint256","name":"tile","type":"uint256"}],"name":"dig","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"gameEndtime","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"gameDuration","type":"uint256"}],"name":"newGame","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"score","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"treasureMap","outputs":[{"internalType":"bytes","name":"","type":"bytes"}],"stateMutability":"view","type":"function"}];
+
+    const message_type_colors = {
+        formError: "#eabfdf",
+        txError: "#eabfdf",
+        pendingTx: "rgb(192 215 239)",
+        txSuccess: "rgb(192 239 193)",
+        info: "#eabfdf",
+    }
+
+    const dugColor = "grey";
+
+    window.message = function(words, type, txHash, noFade=false) {
+        const messageBox = document.createElement("div");
+        messageBox.style.backgroundColor = message_type_colors[type];
+        messageBox.style.borderRadius = "15px";
+        messageBox.style.width = "100%";
+        messageBox.style.margin = "10 0";
+        messageBox.style.padding = "10";
+
+        const mainMessage = document.createElement("div");
+        mainMessage.innerText = words;
+        messageBox.appendChild(mainMessage);
+
+        if (txHash) {
+            const txHashLink = document.createElement("a");
+            const etherscan = window.chainId === 42 ? "https://kovan.etherscan.io/tx/" : "https://etherscan.io/tx/";
+            txHashLink.href = etherscan + txHash;
+            txHashLink.target = "_blank";
+            txHashLink.innerText = "See TX on Etherscan";
+            messageBox.appendChild(txHashLink);
+        }
+
+        document.getElementById("message_box").appendChild(messageBox);
+
+        if (type != "pendingTx" && !noFade) {
+            messageBox.style.opacity = 1;
+            setTimeout(function () {
+                (function fade(){(messageBox.style.opacity-=.05)<0?messageBox.style.display="none":setTimeout(fade,100)})();
+            }, 2000);
+        }
+
+        return messageBox;
+    }
+
+    if (!window.ethereum) {
+        window.message("This site requires an injected ethereum object", "formError", null, true);
+        window.provider = ethers.getDefaultProvider("mainnet");
+        window.contractProvider = window.provider;
+    } else {
+        window.provider = new ethers.providers.Web3Provider(window.ethereum);
+        window.contractProvider = window.provider.getSigner();
+        ethereum.enable();
+    }
+
+    start();
+
+    async function start() {
+        await window.provider.ready;
+        window.account = window.ethereum?.selectedAddress ? window.ethereum?.selectedAddress : window.account;
+        window.chainId = window.provider.network.chainId;
+
+        const treasureHuntAddress = window.chainId === 42? "0x9c14ba26cfa7e43fB4d8880b2867085Fd967e26a" : "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        const treasureHunt = new ethers.Contract(treasureHuntAddress, TreasureHuntABI, window.contractProvider);
+
+        window.treasureHunt = treasureHunt;
+
+        // Setup Game Function
+        await setup();
+
+        // Subscribe to events
+        treasureHunt.on("GameStarted", setup);
+        treasureHunt.on("Dig", dig);
+        treasureHunt.on("Dig", console.log);
+
+        // Set up tile click handler
+        for (let i = 0; i < 32; i++) {
+          document.getElementById(`tile_${i}`).onclick = function () {
+            treasureHunt.dig(i).catch(showErr);
+          }
+        }
+
+        // Set up main loop
+        setInterval(loop, 1000);
+    }
+
+    async function setup() {
+      window.gameEndTime = await treasureHunt.gameEndtime();
+      window.treasureMap = await treasureHunt.treasureMap();
+      window.score = await treasureHunt.score();
+
+      document.getElementById("score").innerText = window.score;
+
+      for (let i = 0; i < 32; i++) {
+        const byteIndex = i*2 + 2;
+        const tileValue = window.treasureMap.slice(byteIndex, byteIndex+2);
+        if (tileValue === "00") {
+          document.getElementById(`tile_${i}`).style.backgroundColor = dugColor;
+        } else {
+          document.getElementById(`tile_${i}`).style.backgroundColor = "darkkhaki";
+        }
+      }
+    }
+
+    async function dig(digger, tile, tileValue, totalScore) {
+      window.score = totalScore;
+      document.getElementById("score").innerText = window.score;
+      document.getElementById(`tile_${tile.toNumber()}`).style.backgroundColor = dugColor;
+      if (tileValue > 0) {
+        window.message(`Tile worth ${tileValue} was dug up by ${digger}!`, "txSuccess", null);
+      } else {
+        window.message(`Tile that was already emptied was dug by ${digger}`, "info", null);
+      }
+    }
+
+    function loop() {
+      window.now = Date.now() / 1000;
+      if (window.now < window.gameEndTime) {
+        document.getElementById("status").innerText = `Seconds Remaining: ${Math.round(window.gameEndTime.toNumber() - window.now)}`;
+      } else {
+        document.getElementById("status").innerText = "Game Over"
+      }
+    }
+
+    function showErr(error) {
+      window.message(`Cannot dig a tile after the game has ended!`, "txError", null);
+    }
+
+</script>
+<body>
+<div class="content">
+  <div><span id="status">-</span></div>
+  <div>Score: <span id="score">-</span></div>
+  <table id="map" style="margin:auto;">
+    <tr>
+      <td style="visibility: hidden;"></td>
+      <td id="tile_0"></td>
+      <td id="tile_1"></td>
+      <td id="tile_2"></td>
+      <td id="tile_3"></td>
+    </tr>
+    <tr>
+      <td id="tile_4"></td>
+      <td id="tile_5"></td>
+      <td id="tile_6"></td>
+      <td id="tile_7"></td>
+      <td id="tile_8"></td>
+      <td id="tile_9"></td>
+    </tr>
+    <tr>
+      <td id="tile_10"></td>
+      <td id="tile_11"></td>
+      <td id="tile_12"></td>
+      <td id="tile_13"></td>
+      <td id="tile_14"></td>
+      <td id="tile_15"></td>
+    </tr>
+    <tr>
+      <td id="tile_16"></td>
+      <td id="tile_17"></td>
+      <td id="tile_18"></td>
+      <td id="tile_19"></td>
+      <td id="tile_20"></td>
+      <td id="tile_21"></td>
+    </tr>
+    <tr>
+      <td id="tile_22"></td>
+      <td id="tile_23"></td>
+      <td id="tile_24"></td>
+      <td id="tile_25"></td>
+      <td id="tile_26"></td>
+      <td id="tile_27"></td>
+    </tr>
+    <tr>
+      <td style="visibility: hidden;"></td>
+      <td id="tile_28"></td>
+      <td id="tile_29"></td>
+      <td id="tile_30"></td>
+      <td id="tile_31"></td>
+    </tr>
+  </table>
+  <div id="message_box"></div>
+</div>
+</body>
+</html>
