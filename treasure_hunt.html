@@ -78,7 +78,7 @@ td {
         window.account = window.ethereum?.selectedAddress ? window.ethereum?.selectedAddress : window.account;
         window.chainId = window.provider.network.chainId;
 
-        const treasureHuntAddress = window.chainId === 42? "0x9c14ba26cfa7e43fB4d8880b2867085Fd967e26a" : "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        const treasureHuntAddress = window.chainId === 42? "0xEE93D852DEA261bBba2DD38Bf47C8fD69DDa91C5" : "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
         const treasureHunt = new ethers.Contract(treasureHuntAddress, TreasureHuntABI, window.contractProvider);
 
         window.treasureHunt = treasureHunt;
